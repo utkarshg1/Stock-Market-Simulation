@@ -1,3 +1,6 @@
+# Cash json file
+cash.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

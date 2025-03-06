@@ -34,25 +34,27 @@ class StockSimulator(QObject):
         drift = (self.mu - 0.5 * self.sigma**2) * self.dt
         diffusion = self.sigma * np.random.normal(0, np.sqrt(self.dt))
         self.price *= np.exp(drift + diffusion)
-        # Emit the new price rounded to 2 decimal places
         self.price_updated.emit(round(self.price, 2))
 
 
-class CashManager(QObject):
-    cash_updated = Signal(float)
+class PortfolioManager(QObject):
+    # Signal that emits both cash and shares when updated
+    portfolio_updated = Signal(float, int)
 
     def __init__(self, filename="cash.json"):
         super().__init__()
         self.filename = filename
-        self._cash = self.load_cash()
+        self._cash, self._shares = self.load_portfolio()
 
-    def load_cash(self):
+    def load_portfolio(self):
         try:
             with open(self.filename, "r") as f:
                 data = json.load(f)
-                return data.get("cash", 10000.0)
+                cash = data.get("cash", 10000.0)
+                shares = data.get("shares", 0)
+                return cash, shares
         except (FileNotFoundError, json.JSONDecodeError):
-            return 10000.0
+            return 10000.0, 0
 
     @property
     def cash(self):
@@ -61,28 +63,36 @@ class CashManager(QObject):
     @cash.setter
     def cash(self, value):
         self._cash = round(value, 2)
-        self.save_cash()
-        self.cash_updated.emit(self._cash)
+        self.save_portfolio()
+        self.portfolio_updated.emit(self._cash, self._shares)
 
-    def save_cash(self):
+    @property
+    def shares(self):
+        return self._shares
+
+    @shares.setter
+    def shares(self, value):
+        self._shares = int(value)
+        self.save_portfolio()
+        self.portfolio_updated.emit(self._cash, self._shares)
+
+    def save_portfolio(self):
         with open(self.filename, "w") as f:
-            json.dump({"cash": self._cash}, f)
+            json.dump({"cash": self._cash, "shares": self._shares}, f)
 
 
 class StockTradingApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.shares_owned = 0
         self.current_price = 100.0
-        self.price_history = [self.current_price]  # Keep track of price changes
-        self.cash_manager = CashManager()
+        self.price_history = [self.current_price]  # Track price changes over time
+        self.portfolio_manager = PortfolioManager()  # Now handles both cash and shares
         self.stock_simulator = StockSimulator()
         self.init_ui()
         self.setup_timers()
 
     def init_ui(self):
         self.setWindowTitle("Stock Market Simulator")
-        # Set a larger window size
         self.setGeometry(100, 100, 1200, 800)
 
         # Title label with cool styling
@@ -92,10 +102,10 @@ class StockTradingApp(QMainWindow):
             "font-size: 28px; font-weight: bold; color: #333; padding: 10px;"
         )
 
-        # Create widgets for cash and shares
-        self.cash_label = QLabel(f"Cash: ${self.cash_manager.cash:.2f}")
+        # Portfolio labels (cash and shares)
+        self.cash_label = QLabel(f"Cash: ${self.portfolio_manager.cash:.2f}")
         self.cash_label.setStyleSheet("font-size: 18px;")
-        self.shares_label = QLabel(f"Shares Owned: {self.shares_owned}")
+        self.shares_label = QLabel(f"Shares Owned: {self.portfolio_manager.shares}")
         self.shares_label.setStyleSheet("font-size: 18px;")
 
         # Create a larger matplotlib figure and canvas for the price graph
@@ -105,12 +115,11 @@ class StockTradingApp(QMainWindow):
         self.ax.set_xlabel("Time")
         self.ax.set_ylabel("Price")
         self.canvas = FigureCanvas(self.figure)
-        # Allow the canvas to expand with the window
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.canvas.updateGeometry()
         self.update_graph()  # Plot the initial price
 
-        # Create trade panel widgets with styling
+        # Trade panel widgets with styling
         self.quantity_input = QLineEdit()
         self.quantity_input.setPlaceholderText("Enter shares quantity")
         self.quantity_input.setStyleSheet("font-size: 16px; padding: 5px;")
@@ -130,7 +139,7 @@ class StockTradingApp(QMainWindow):
         # Title section
         main_layout.addWidget(title_label)
 
-        # Info panel (cash and shares)
+        # Portfolio info panel (cash and shares)
         info_layout = QHBoxLayout()
         info_layout.addWidget(self.cash_label)
         info_layout.addStretch()
@@ -155,17 +164,18 @@ class StockTradingApp(QMainWindow):
         # Connect signals
         self.buy_button.clicked.connect(self.buy_stock)
         self.sell_button.clicked.connect(self.sell_stock)
-        self.cash_manager.cash_updated.connect(self.update_cash_display)
+        self.portfolio_manager.portfolio_updated.connect(self.update_portfolio_display)
         self.stock_simulator.price_updated.connect(self.update_price_display)
 
     def setup_timers(self):
-        # Update price every second
+        # Update the stock price every second
         self.price_timer = QTimer()
         self.price_timer.timeout.connect(self.stock_simulator.update_price)
-        self.price_timer.start(1000)  # Update every 1 second
+        self.price_timer.start(1000)
 
-    def update_cash_display(self, cash):
+    def update_portfolio_display(self, cash, shares):
         self.cash_label.setText(f"Cash: ${cash:.2f}")
+        self.shares_label.setText(f"Shares Owned: {shares}")
 
     def update_price_display(self, price):
         self.current_price = price
@@ -184,11 +194,9 @@ class StockTradingApp(QMainWindow):
         try:
             quantity = int(self.quantity_input.text())
             total_cost = self.current_price * quantity
-
-            if total_cost <= self.cash_manager.cash:
-                self.cash_manager.cash -= total_cost
-                self.shares_owned += quantity
-                self.shares_label.setText(f"Shares Owned: {self.shares_owned}")
+            if total_cost <= self.portfolio_manager.cash:
+                self.portfolio_manager.cash -= total_cost
+                self.portfolio_manager.shares += quantity
             else:
                 self.show_error("Insufficient funds!")
         except ValueError:
@@ -197,11 +205,10 @@ class StockTradingApp(QMainWindow):
     def sell_stock(self):
         try:
             quantity = int(self.quantity_input.text())
-            if quantity <= self.shares_owned:
+            if quantity <= self.portfolio_manager.shares:
                 total_revenue = self.current_price * quantity
-                self.cash_manager.cash += total_revenue
-                self.shares_owned -= quantity
-                self.shares_label.setText(f"Shares Owned: {self.shares_owned}")
+                self.portfolio_manager.cash += total_revenue
+                self.portfolio_manager.shares -= quantity
             else:
                 self.show_error("Not enough shares!")
         except ValueError:
@@ -218,5 +225,5 @@ class StockTradingApp(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = StockTradingApp()
-    window.showMaximized()  # Show the window maximized for a larger display
+    window.showMaximized()  # Launch maximized for a larger display
     sys.exit(app.exec())
