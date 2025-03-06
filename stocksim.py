@@ -30,7 +30,7 @@ class StockSimulator(QObject):
         self.dt = dt  # Time step (daily)
 
     def update_price(self):
-        # GBM formula: dS = μSdt + σSdW
+        # Geometric Brownian Motion formula: dS = μSdt + σSdW
         drift = (self.mu - 0.5 * self.sigma**2) * self.dt
         diffusion = self.sigma * np.random.normal(0, np.sqrt(self.dt))
         self.price *= np.exp(drift + diffusion)
@@ -38,7 +38,7 @@ class StockSimulator(QObject):
 
 
 class PortfolioManager(QObject):
-    # Signal that emits both cash and shares when updated
+    # Signal emits updated cash and shares values
     portfolio_updated = Signal(float, int)
 
     def __init__(self, filename="cash.json"):
@@ -85,8 +85,11 @@ class StockTradingApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.current_price = 100.0
-        self.price_history = [self.current_price]  # Track price changes over time
-        self.portfolio_manager = PortfolioManager()  # Now handles both cash and shares
+        self.price_history = [self.current_price]  # Track price over time
+        self.buy_events = []  # List of tuples (index, price) for buy events
+        self.sell_events = []  # List of tuples (index, price) for sell events
+
+        self.portfolio_manager = PortfolioManager()  # Manages both cash and shares
         self.stock_simulator = StockSimulator()
         self.init_ui()
         self.setup_timers()
@@ -102,7 +105,7 @@ class StockTradingApp(QMainWindow):
             "font-size: 28px; font-weight: bold; color: #333; padding: 10px;"
         )
 
-        # Portfolio labels (cash and shares)
+        # Portfolio info panel
         self.cash_label = QLabel(f"Cash: ${self.portfolio_manager.cash:.2f}")
         self.cash_label.setStyleSheet("font-size: 18px;")
         self.shares_label = QLabel(f"Shares Owned: {self.portfolio_manager.shares}")
@@ -183,11 +186,32 @@ class StockTradingApp(QMainWindow):
         self.update_graph()
 
     def update_graph(self):
-        self.ax.clear()  # Clear previous graph
-        self.ax.plot(self.price_history, color="blue")
+        self.ax.clear()  # Clear the previous graph
+        x = list(range(len(self.price_history)))
+        self.ax.plot(x, self.price_history, color="blue", label="Price")
         self.ax.set_title("Stock Price Movement")
         self.ax.set_xlabel("Time")
         self.ax.set_ylabel("Price")
+
+        # Plot buy events (green up arrows)
+        if self.buy_events:
+            x_buy = [pt[0] for pt in self.buy_events]
+            y_buy = [pt[1] for pt in self.buy_events]
+            self.ax.scatter(
+                x_buy, y_buy, marker="^", s=100, color="green", zorder=5, label="Buy"
+            )
+        # Plot sell events (red down arrows)
+        if self.sell_events:
+            x_sell = [pt[0] for pt in self.sell_events]
+            y_sell = [pt[1] for pt in self.sell_events]
+            self.ax.scatter(
+                x_sell, y_sell, marker="v", s=100, color="red", zorder=5, label="Sell"
+            )
+
+        # Optionally add legend if any events are present
+        if self.buy_events or self.sell_events:
+            self.ax.legend()
+
         self.canvas.draw()
 
     def buy_stock(self):
@@ -197,6 +221,10 @@ class StockTradingApp(QMainWindow):
             if total_cost <= self.portfolio_manager.cash:
                 self.portfolio_manager.cash -= total_cost
                 self.portfolio_manager.shares += quantity
+                # Record a buy event marker at the current time index
+                self.buy_events.append(
+                    (len(self.price_history) - 1, self.current_price)
+                )
             else:
                 self.show_error("Insufficient funds!")
         except ValueError:
@@ -209,6 +237,10 @@ class StockTradingApp(QMainWindow):
                 total_revenue = self.current_price * quantity
                 self.portfolio_manager.cash += total_revenue
                 self.portfolio_manager.shares -= quantity
+                # Record a sell event marker at the current time index
+                self.sell_events.append(
+                    (len(self.price_history) - 1, self.current_price)
+                )
             else:
                 self.show_error("Not enough shares!")
         except ValueError:
