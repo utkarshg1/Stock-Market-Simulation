@@ -135,7 +135,15 @@ class StockTradingApp(QMainWindow):
         self.quantity_input.setPlaceholderText("Enter shares quantity")
         self.quantity_input.setStyleSheet("font-size: 16px; padding: 5px;")
         self.buy_button = QPushButton("Buy")
+        # Make buy button green
+        self.buy_button.setStyleSheet(
+            "background-color: green; color: white; font-size: 16px; padding: 5px;"
+        )
         self.sell_button = QPushButton("Sell")
+        # Make sell button red
+        self.sell_button.setStyleSheet(
+            "background-color: red; color: white; font-size: 16px; padding: 5px;"
+        )
 
         # Layout
         main_widget = QWidget()
