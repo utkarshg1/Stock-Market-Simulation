@@ -116,6 +116,9 @@ class StockTradingApp(QMainWindow):
         self.cash_label.setStyleSheet("font-size: 18px;")
         self.shares_label = QLabel(f"Shares Owned: {self.portfolio_manager.shares}")
         self.shares_label.setStyleSheet("font-size: 18px;")
+        # Added stock price label (formatted to 2 decimals)
+        self.price_label = QLabel(f"Stock Price: ${self.current_price:.2f}")
+        self.price_label.setStyleSheet("font-size: 18px;")
 
         # Matplotlib graph
         self.figure = Figure(figsize=(10, 6))
@@ -132,13 +135,7 @@ class StockTradingApp(QMainWindow):
         self.quantity_input.setPlaceholderText("Enter shares quantity")
         self.quantity_input.setStyleSheet("font-size: 16px; padding: 5px;")
         self.buy_button = QPushButton("Buy")
-        self.buy_button.setStyleSheet(
-            "font-size: 16px; padding: 5px; background-color: #4CAF50; color: white;"
-        )
         self.sell_button = QPushButton("Sell")
-        self.sell_button.setStyleSheet(
-            "font-size: 16px; padding: 5px; background-color: #f44336; color: white;"
-        )
 
         # Layout
         main_widget = QWidget()
@@ -150,6 +147,8 @@ class StockTradingApp(QMainWindow):
         info_layout.addWidget(self.cash_label)
         info_layout.addStretch()
         info_layout.addWidget(self.shares_label)
+        info_layout.addStretch()
+        info_layout.addWidget(self.price_label)  # Add price label in the info layout
         main_layout.addLayout(info_layout)
 
         main_layout.addWidget(self.canvas)
@@ -182,6 +181,8 @@ class StockTradingApp(QMainWindow):
     def update_price_display(self, price):
         self.current_price = price
         self.price_history.append(price)
+        # Update stock price label with 2 decimal precision
+        self.price_label.setText(f"Stock Price: ${price:.2f}")
         self.update_graph()
 
     def update_graph(self):
