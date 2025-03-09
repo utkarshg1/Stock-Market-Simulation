@@ -3,3 +3,4 @@ pandas
 matplotlib
 mplfinance
 PySide6
+pyinstaller

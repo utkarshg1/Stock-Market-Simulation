@@ -80,3 +80,10 @@ pip install -r reqirements.txt
 ```bash
 python stocksim.py
 ```
+
+## Building .exe file for windows
+
+```bash
+pyinstaller --onefile --noconsole -w stocksim.py
+```
+file will get generated on dist/stocksim.exe
